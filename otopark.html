@@ -71,7 +71,7 @@
   <!-- Açılış Bilgilendirme -->
   <div class="popup-info-bg" id="infoPopup" style="display:none;">
     <div class="popup-info">
-      <b><span id="popupRadius">5 KM</span> Çevrenizdeki Otoparklar</b>
+      <b><span id="popupRadius">3 KM</span> Çevrenizdeki Otoparklar</b>
       <div style="margin-top:10px;font-weight:500;">
         Konumunuza yakın otoparklar gösteriliyor.<br><br>
         <span style="color:var(--accent);font-weight:700;">Harita yükleniyor...</span>
@@ -91,8 +91,8 @@
 const CATEGORY = { keyword: "Otopark", key: "otopark", color: "#24c257" };
 
 /* Hedef: 5 km içinde en fazla 60 sonuç (istersen 100 yapabilirsin) */
-const MAX_RESULTS = 60;
-const SEARCH_RADIUS = 5000;  // 5 km sabit
+const MAX_RESULTS = 40;
+const SEARCH_RADIUS = 3000;  // 5 km sabit
 
 /* Otoparklar için zengin anahtar kelimeler + type: "parking" */
 const PARK_KEYWORDS = [
