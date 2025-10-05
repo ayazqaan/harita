@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Viteska – Trafik Durumu</title>
+<style>
+  :root{ --brand:#f27405; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent }
+  html,body{ margin:0; height:100%; font-family:'Segoe UI',sans-serif; }
+
+  /* Harita */
+  #map{ width:100vw; height:100vh; }
+
+  /* Üst bilgi çubuğu */
+  .legend-bar{
+    position:fixed; top:0; left:50%; transform:translateX(-50%);
+    display:flex; justify-content:center; align-items:center; gap:10px;
+    background:#fff; border-bottom:2px solid #ffe2c2;
+    box-shadow:0 3px 14px rgba(242,116,5,.15);
+    padding:8px 12px; border-radius:0 0 12px 12px;
+    z-index:5;
+  }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-weight:700; color:#333; font-size:.92rem; }
+  .legend-color{ width:18px; height:10px; border-radius:4px; box-shadow:0 0 4px #0002; }
+
+  /* Alt buton */
+  .traffic-toggle{
+    position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+    background:#fff; color:var(--brand);
+    border:2px solid #ffd9b5; border-radius:14px;
+    padding:10px 16px; font-weight:900; cursor:pointer;
+    box-shadow:0 6px 18px rgba(242,116,5,.15);
+    z-index:5;
+  }
+</style>
+</head>
+<body>
+  <div class="legend-bar">
+    <div class="legend-item"><div class="legend-color" style="background:#00c853;"></div> Akıcı</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ffeb3b;"></div> Yoğun</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ff5722;"></div> Sıkışık</div>
+    <div class="legend-item"><div class="legend-color" style="background:#9e9e9e;"></div> Kapalı</div>
+  </div>
+
+  <div id="map"></div>
+  <button id="toggleBtn" class="traffic-toggle" aria-pressed="true">Trafik: AÇIK</button>
+
+<script>
+let map, trafficLayer, userPos=null;
+
+function initMap(){
+  map = new google.maps.Map(document.getElementById('map'), {
+    center:{lat:39.92077,lng:32.85411}, zoom:12,
+    mapTypeControl:false, streetViewControl:false, fullscreenControl:false
+  });
+
+  // Başlangıçta trafik katmanı açık
+  trafficLayer = new google.maps.TrafficLayer();
+  trafficLayer.setMap(map);
+
+  // Konuma odaklan
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      pos=>{ userPos={lat:pos.coords.latitude,lng:pos.coords.longitude}; map.setCenter(userPos); map.setZoom(13); },
+      ()=>{}
+    );
+  }
+
+  // Aç/Kapa düğmesi
+  const btn=document.getElementById('toggleBtn');
+  btn.addEventListener('click', ()=>{
+    const on = !!trafficLayer.getMap();
+    trafficLayer.setMap(on ? null : map);
+    btn.textContent = `Trafik: ${on ? 'KAPALI' : 'AÇIK'}`;
+    btn.setAttribute('aria-pressed', String(!on));
+  });
+}
+
+window.initMap = initMap;
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-MpFcUMdFif1OPAGWcBhmWjWDPaM7Qz0&callback=initMap" async defer></script>
+</body>
+</html>
