@@ -6,7 +6,7 @@
 <title>Viteska – Trafik Durumu</title>
 <style>
   :root{ --brand:#f27405; }
-  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; height:100%; font-family:'Segoe UI',sans-serif; }
 
   /* Harita */
@@ -31,11 +31,125 @@
     border:2px solid #ffd9b5; border-radius:14px;
     padding:10px 16px; font-weight:900; cursor:pointer;
     box-shadow:0 6px 18px rgba(242,116,5,.15);
-    z-index:5;
+    z-index:6;
   }
+
+  /* Genel bilgilendirme kutusu */
+  .info-box{
+    position:fixed;
+    left:50%; transform:translateX(-50%);
+    top:70px;
+    background:#fff;
+    padding:12px 16px;
+    border-radius:14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.12);
+    width:90%;
+    max-width:400px;
+    z-index:5;
+    border-left:5px solid var(--brand);
+    font-size:.93rem;
+  }
+  .info-title{
+    font-weight:800; font-size:1rem; margin-bottom:6px; color:#333;
+  }
+  .info-sub{
+    font-size:.8rem; color:#666; margin-top:4px;
+  }
+
+  /* Aşağıdan çıkan trafik detay paneli */
+  .traffic-panel{
+    position:fixed;
+    left:50%;
+    bottom:0;
+    transform:translate(-50%, 110%);
+    transition:transform .28s ease;
+    width:100%;
+    max-width:480px;
+    background:#fff;
+    box-shadow:0 -6px 18px rgba(0,0,0,.22);
+    border-radius:18px 18px 0 0;
+    padding:12px 16px 16px;
+    z-index:7;
+  }
+  .traffic-panel.show{
+    transform:translate(-50%, 0);
+  }
+  .panel-header{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:6px;
+  }
+  .panel-title{
+    font-weight:800; font-size:1rem; color:#333;
+  }
+  .panel-chip{
+    font-size:.72rem; padding:4px 8px;
+    border-radius:999px; font-weight:700;
+    background:#f5f5f5;
+  }
+  .panel-delay{
+    font-size:.94rem; margin:6px 0; font-weight:700;
+  }
+  .panel-reason{
+    font-size:.86rem; color:#555; margin-bottom:4px;
+  }
+  .panel-suggestion{
+    font-size:.86rem; color:#333; margin-top:4px;
+  }
+  .panel-alt{
+    font-size:.8rem; color:#777; margin-top:4px;
+  }
+  .panel-close{
+    border:none; background:transparent; font-size:1.2rem; cursor:pointer; padding:4px; color:#777;
+  }
+
+  .panel-badge-row{
+    display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;
+  }
+  .panel-badge{
+    font-size:.72rem; padding:3px 7px; border-radius:999px; background:#fff4ea; color:#a85b16; border:1px solid #ffd1a1;
+  }
+
+  /* Kullanıcı konumu için animasyonlu alan (pulse) - JS ile Circle da var ama görsel destek için */
+  .user-status-pill{
+    position:fixed;
+    right:10px;
+    top:76px;
+    background:#ffffff;
+    border-radius:999px;
+    box-shadow:0 3px 12px rgba(0,0,0,.15);
+    padding:6px 10px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:.78rem;
+    z-index:6;
+  }
+  .user-dot{
+    width:10px; height:10px; border-radius:50%;
+    background:#00c853;
+    position:relative;
+    overflow:visible;
+  }
+  .user-dot::after{
+    content:"";
+    position:absolute;
+    left:50%; top:50%;
+    width:10px; height:10px;
+    border-radius:50%;
+    border:2px solid rgba(0,200,83,.6);
+    transform:translate(-50%,-50%);
+    animation:pulseDot 1.4s infinite;
+  }
+  @keyframes pulseDot{
+    0%{ transform:translate(-50%,-50%) scale(1); opacity:.9; }
+    100%{ transform:translate(-50%,-50%) scale(2.3); opacity:0; }
+  }
+
 </style>
 </head>
 <body>
+
+  <!-- Üstteki renk efsanesi aynı kaldı -->
   <div class="legend-bar">
     <div class="legend-item"><div class="legend-color" style="background:#00c853;"></div> Akıcı</div>
     <div class="legend-item"><div class="legend-color" style="background:#ffeb3b;"></div> Yoğun</div>
@@ -43,31 +157,183 @@
     <div class="legend-item"><div class="legend-color" style="background:#9e9e9e;"></div> Kapalı</div>
   </div>
 
+  <!-- Genel bilgi kutusu -->
+  <div class="info-box" id="infoBox">
+    <div class="info-title">🚦 Canlı Trafik Görünümü</div>
+    Harita, bulunduğun konumu <b>yeşil araç ikonu</b> ile gösterir. Yakındaki trafik noktalarına tıkladığında,
+    <b>tahmini gecikme süresi</b> ve <b>alternatif rota önerileri</b> bu sayfada listelenir.
+    <div class="info-sub">İpucu: Haritayı yakınlaştırdıkça daha detaylı nokta görebilirsin.</div>
+  </div>
+
+  <!-- Kullanıcı durum pill'i -->
+  <div class="user-status-pill">
+    <div class="user-dot"></div>
+    <span id="userStatusText">Konum bekleniyor…</span>
+  </div>
+
+  <!-- Trafik detay paneli -->
+  <div class="traffic-panel" id="trafficPanel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title" id="panelTitle">Trafik Noktası</div>
+        <div class="panel-reason" id="panelReason">Durum bilgisi yükleniyor...</div>
+      </div>
+      <button class="panel-close" id="panelCloseBtn" aria-label="Kapat">✕</button>
+    </div>
+    <div class="panel-delay" id="panelDelay">Tahmini gecikme: - dk</div>
+    <div class="panel-suggestion" id="panelSuggestion"></div>
+    <div class="panel-alt" id="panelAlt"></div>
+
+    <div class="panel-badge-row">
+      <div class="panel-badge" id="panelLevelBadge">Yoğunluk: -</div>
+      <div class="panel-badge">Viteska Tavsiye Modülü</div>
+    </div>
+  </div>
+
   <div id="map"></div>
   <button id="toggleBtn" class="traffic-toggle" aria-pressed="true">Trafik: AÇIK</button>
 
 <script>
-let map, trafficLayer, userPos=null;
+let map, trafficLayer;
+let userMarker = null;
+let userCircle = null;
+let userHasCentered = false;
+let circleAnimInterval = null;
+let trafficMarkers = [];
+
+// Basit trafik noktaları datası (örnek) – merkez etrafına yerleştiriyoruz:
+function getSampleTrafficPoints(center){
+  const baseLat = center.lat();
+  const baseLng = center.lng();
+  return [
+    {
+      title:"Şehir Merkezi Kavşağı",
+      level:"Sıkışık",
+      delayMin:18,
+      reason:"Akşam iş çıkışı yoğunluğu",
+      suggestion:"Mümkünse bir sonraki kavşaktan dönerek paralel caddeyi kullan.",
+      alt:"Toplu taşıma kullanma imkânın varsa bu saatlerde araç yerine onu tercih etmek süreni kısaltabilir.",
+      position:{lat:baseLat+0.015,lng:baseLng+0.01}
+    },
+    {
+      title:"Ana Bulvar – Yol Çalışması",
+      level:"Yoğun",
+      delayMin:12,
+      reason:"Tek şeride düşen yol çalışması",
+      suggestion:"Çalışma bitene kadar bir alt veya üst paralel caddeyi tercih et. Navigasyondan alternatif rotayı kontrol et.",
+      alt:"Kısa mesafelerde U dönüşü yaparak çalışmanın bittiği noktadan tekrar ana yola bağlanabilirsin.",
+      position:{lat:baseLat-0.012,lng:baseLng-0.008}
+    },
+    {
+      title:"Çevreyolu Girişi",
+      level:"Akıcı",
+      delayMin:3,
+      reason:"Akıcı fakat yoğunluk artma eğiliminde",
+      suggestion:"Şu anda çevreyolu daha avantajlı görünüyor, uzun mesafe gideceksen burayı kullanabilirsin.",
+      alt:"Yoğunluk artarsa uygulama üzerindeki diğer kavşak noktalarını da kontrol etmeyi unutma.",
+      position:{lat:baseLat+0.02,lng:baseLng-0.005}
+    },
+    {
+      title:"Köprü Öncesi Şerit Daralması",
+      level:"Çok Sıkışık",
+      delayMin:26,
+      reason:"Köprü girişi ve şerit daralması",
+      suggestion:"Köprüye girmeden önceki son çıkıştan şehir içi bağlantı yoluna girerek bekleme süreni azaltabilirsin.",
+      alt:"Yoğunluk kısa sürede azalacak gibi görünmüyorsa köprü yerine alternatif güzergâh düşünülebilir.",
+      position:{lat:baseLat-0.02,lng:baseLng+0.015}
+    }
+  ];
+}
+
+function getLevelColor(level){
+  switch(level){
+    case "Akıcı": return "#00c853";
+    case "Yoğun": return "#ffeb3b";
+    case "Sıkışık": return "#ff5722";
+    case "Çok Sıkışık": return "#d50000";
+    default: return "#9e9e9e";
+  }
+}
+
+function updateUserStatus(text){
+  const el = document.getElementById('userStatusText');
+  if(el) el.textContent = text;
+}
+
+function openTrafficPanel(data){
+  const panel = document.getElementById('trafficPanel');
+  document.getElementById('panelTitle').textContent = "📍 " + data.title;
+  document.getElementById('panelReason').textContent = "Durum: " + data.reason;
+  document.getElementById('panelDelay').textContent = "Tahmini gecikme: " + data.delayMin + " dk";
+  document.getElementById('panelSuggestion').textContent = "🚗 Öneri: " + data.suggestion;
+  document.getElementById('panelAlt').textContent = "ℹ " + data.alt;
+
+  const levelBadge = document.getElementById('panelLevelBadge');
+  levelBadge.textContent = "Yoğunluk: " + data.level;
+  levelBadge.style.color = "#000";
+  levelBadge.style.borderColor = getLevelColor(data.level);
+  levelBadge.style.background = "#fffdf4";
+
+  panel.classList.add('show');
+
+  // Üstteki infoBox içeriğini de kısaca güncelle
+  const infoBox = document.getElementById('infoBox');
+  if(infoBox){
+    infoBox.querySelector('.info-title').textContent = "Seçili Bölge: " + data.title;
+  }
+}
+
+function closeTrafficPanel(){
+  const panel = document.getElementById('trafficPanel');
+  panel.classList.remove('show');
+}
+
+function initTrafficPoints(){
+  const center = map.getCenter();
+  const points = getSampleTrafficPoints(center);
+
+  points.forEach(p=>{
+    const marker = new google.maps.Marker({
+      position:p.position,
+      map:map,
+      title:p.title,
+      icon:{
+        url:"data:image/svg+xml;utf-8," +
+          "<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34'>" +
+          "<circle cx='17' cy='17' r='12' fill='" + getLevelColor(p.level) + "' stroke='white' stroke-width='3' />" +
+          "<text x='17' y='21' text-anchor='middle' font-size='14' fill='#000' font-family='Segoe UI'>T</text>" +
+          "</svg>",
+        scaledSize:new google.maps.Size(30,30)
+      }
+    });
+
+    marker.addListener('click', ()=> openTrafficPanel(p));
+    trafficMarkers.push(marker);
+  });
+}
+
+function startCircleAnimation(){
+  if(!userCircle || circleAnimInterval) return;
+  const baseRadius = 70;
+  circleAnimInterval = setInterval(()=>{
+    const t = Date.now() / 700;
+    const r = baseRadius + Math.sin(t) * 30;
+    userCircle.setRadius(r);
+  }, 160);
+}
 
 function initMap(){
   map = new google.maps.Map(document.getElementById('map'), {
-    center:{lat:39.92077,lng:32.85411}, zoom:12,
+    center:{lat:39.92077,lng:32.85411}, // Ankara default
+    zoom:12,
     mapTypeControl:false, streetViewControl:false, fullscreenControl:false
   });
 
-  // Başlangıçta trafik katmanı açık
+  // Trafik katmanı
   trafficLayer = new google.maps.TrafficLayer();
   trafficLayer.setMap(map);
 
-  // Konuma odaklan
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(
-      pos=>{ userPos={lat:pos.coords.latitude,lng:pos.coords.longitude}; map.setCenter(userPos); map.setZoom(13); },
-      ()=>{}
-    );
-  }
-
-  // Aç/Kapa düğmesi
+  // Trafik aç/kapa
   const btn=document.getElementById('toggleBtn');
   btn.addEventListener('click', ()=>{
     const on = !!trafficLayer.getMap();
@@ -75,6 +341,75 @@ function initMap(){
     btn.textContent = `Trafik: ${on ? 'KAPALI' : 'AÇIK'}`;
     btn.setAttribute('aria-pressed', String(!on));
   });
+
+  // Trafik panel kapatma
+  document.getElementById('panelCloseBtn').addEventListener('click', closeTrafficPanel);
+  // Haritaya tıklayınca panel kapanabilir
+  map.addListener('click', closeTrafficPanel);
+
+  // Kullanıcı konumu
+  if(navigator.geolocation){
+    navigator.geolocation.watchPosition(
+      pos => {
+        const loc = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+
+        if(!userHasCentered){
+          map.setCenter(loc);
+          map.setZoom(13);
+          userHasCentered = true;
+        }
+
+        // İlk kez marker oluştur
+        if(!userMarker){
+          userMarker = new google.maps.Marker({
+            position:loc,
+            map:map,
+            title:"Bulunduğun Konum",
+            icon:{
+              url:"data:image/svg+xml;utf-8," +
+                "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'>" +
+                "<circle cx='20' cy='20' r='18' fill='#ffffff' stroke='#00c853' stroke-width='2' />" +
+                "<rect x='10' y='16' width='20' height='10' rx='4' ry='4' fill='#00c853' />" +
+                "<circle cx='15' cy='21' r='3' fill='#e8f5e9' />" +
+                "<circle cx='25' cy='21' r='3' fill='#e8f5e9' />" +
+                "<rect x='13' y='14' width='14' height='4' rx='2' ry='2' fill='#00e676' />" +
+                "</svg>",
+              scaledSize:new google.maps.Size(34,34)
+            },
+            zIndex:999
+          });
+
+          userCircle = new google.maps.Circle({
+            strokeColor:'#00c853',
+            strokeOpacity:0.35,
+            strokeWeight:1,
+            fillColor:'#00c853',
+            fillOpacity:0.10,
+            map:map,
+            center:loc,
+            radius:70
+          });
+
+          startCircleAnimation();
+        } else {
+          userMarker.setPosition(loc);
+          userCircle.setCenter(loc);
+        }
+
+        updateUserStatus("Konum alındı • Canlı izleniyor");
+      },
+      err => {
+        console.log("Konum alınamadı:", err);
+        updateUserStatus("Konum izni reddedildi");
+      },
+      {enableHighAccuracy:true, maximumAge:0, timeout:8000}
+    );
+  } else {
+    updateUserStatus("Cihaz konum servisini desteklemiyor");
+  }
+
+  // Örnek trafik noktalarını yükle
+  initTrafficPoints();
 }
 
 window.initMap = initMap;
