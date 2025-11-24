@@ -24,7 +24,7 @@
     overflow:hidden;
   }
 
-  /* Üst bar */
+  /* Üst bar (ortalanmış) */
   .topbar{
     display:flex;
     justify-content:center;
@@ -74,7 +74,7 @@
   /* Harita alanı */
   #mapWrap{
     width:100vw;
-    height:calc(100vh - 52px - 50px);
+    height:calc(100vh - 52px - 50px); /* topbar + mesafe filtresi */
     position:relative;
   }
   #map{width:100%;height:100%;}
@@ -92,10 +92,53 @@
     box-shadow:0 3px 12px #f2740533;
   }
 
-  /* Rota paneli */
+  /* Alttaki harita bilgi kutusu */
+  .info-box{
+    position:fixed;
+    left:0;
+    bottom:0;
+    width:100vw;
+    background:#fafafa;
+    border-top:1px solid #ffd7b0;
+    padding:8px 30px 9px 10px; /* sağda X butonu için boşluk */
+    font-size:.74rem;
+    color:#555;
+    line-height:1.3;
+    z-index:25;
+  }
+  .info-title{
+    font-weight:800;
+    margin-bottom:3px;
+    color:var(--accent);      /* tema rengi */
+    font-size:.86rem;         /* bir tık büyük */
+  }
+  .info-text b{color:#000;}
+
+  /* Bilgi kutusu kapatma butonu (X) */
+  .info-close{
+    position:absolute;
+    top:5px;
+    right:6px;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    border:none;
+    background:#e53935;         /* kırmızı */
+    color:#fff;
+    font-weight:900;
+    font-size:.9rem;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.25);
+  }
+
+  /* Rota paneli – info-box'ın üstünde */
   #routeInfoBox{
     position:fixed;
-    left:0;bottom:0;
+    left:0;
+    bottom:54px; /* info-box yüksekliği kadar yukarıda */
     width:100vw;
     z-index:30;
     display:none;
@@ -161,25 +204,36 @@
   <div id="mapLoading">Harita yükleniyor...</div>
 </div>
 
+<!-- ALTTaki HARİTA BİLGİ KUTUSU -->
+<div class="info-box" id="infoBox">
+  <button class="info-close" onclick="closeInfoBox()">×</button>
+  <div class="info-title">Harita Bilgilendirme</div>
+  <div class="info-text">
+    Bu harita, <b>bulunduğunuz konumu merkez</b> alarak çevrenizdeki yetkili ve özel oto bayi / galerileri gösterir.<br>
+    Yukarıdaki mesafe çubuğundan <b>yarıçapı değiştirebilir</b>, işaretçilere dokunarak rota oluşturabilirsiniz.<br>
+    <b>En iyi ve en güncel firmaları öneriyoruz</b> — rota süresi ve mesafe bilgisi Google Maps verilerine göre canlı hesaplanır.
+  </div>
+</div>
+
 <!-- ROTA PANEL -->
 <div id="routeInfoBox">
   <div class="route-info-inner" id="routeInfoInner"></div>
 </div>
 
 <script>
-/*** VİTESKA – OTO BAYİ & GALERİ HARİTASI – TURUNCU TEMA ***/
+/*** VİTESKA – OTO BAYİ & GALERİ HARİTASI – TURUNCU TEMA (PAGINATION, SINIRSIZ SONUÇ) ***/
 
 let map, userPos=null, userMarker=null;
 let placesService, directionsService, directionsRenderer;
 let markers = [];
-let MAX_RESULTS   = 25;
-let SEARCH_RADIUS = 1000;
+let SEARCH_RADIUS = 1000;   // varsayılan 1 KM
 
 function clearMarkers(){
   markers.forEach(m => m.setMap(null));
   markers = [];
 }
 
+/* Yakındaki bayileri getir – pagination ile tüm sayfalar */
 function loadDealers(){
   if(!userPos || !placesService) return;
 
@@ -192,32 +246,51 @@ function loadDealers(){
     language: "tr"
   };
 
-  placesService.nearbySearch(request,(results,status)=>{
-    if(status !== google.maps.places.PlacesServiceStatus.OK || !results){
-      console.log("Bayi/galeri bulunamadı:", status);
-      return;
+  const allResults = [];
+  const seen = new Set();
+
+  function handleResults(results, status, pagination){
+    if(status === google.maps.places.PlacesServiceStatus.OK && results){
+      for(const place of results){
+        if(!place.place_id) continue;
+        if(seen.has(place.place_id)) continue;
+        seen.add(place.place_id);
+        allResults.push(place);
+      }
+
+      if(pagination && pagination.hasNextPage){
+        setTimeout(()=>pagination.nextPage(), 1200);
+        return;
+      }
     }
 
-    results.slice(0, MAX_RESULTS).forEach(place=>{
-      if(!place.geometry || !place.geometry.location) return;
+    addAllMarkers(allResults);
+  }
 
-      const marker = new google.maps.Marker({
-        map,
-        position: place.geometry.location,
-        title: place.name,
-        icon:{
-          path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          scale: 7,
-          fillColor: "#f27405",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 1
-        }
-      });
+  placesService.nearbySearch(request, handleResults);
+}
 
-      marker.addListener("click",()=> createRoute(place));
-      markers.push(marker);
+/* Tüm sonuçlardan marker üret */
+function addAllMarkers(list){
+  list.forEach(place=>{
+    if(!place.geometry || !place.geometry.location) return;
+
+    const marker = new google.maps.Marker({
+      map,
+      position: place.geometry.location,
+      title: place.name,
+      icon:{
+        path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+        scale: 7,
+        fillColor: "#f27405",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 1
+      }
     });
+
+    marker.addListener("click",()=> createRoute(place));
+    markers.push(marker);
   });
 }
 
@@ -314,6 +387,15 @@ function goMaps(lat,lng){
 function closeRoute(){
   document.getElementById("routeInfoBox").style.display="none";
   if(directionsRenderer) directionsRenderer.set("directions", null);
+}
+
+/* Bilgi kutusunu kapat (X) */
+function closeInfoBox(){
+  const box = document.getElementById("infoBox");
+  if(box) box.style.display = "none";
+
+  const routeBox = document.getElementById("routeInfoBox");
+  if(routeBox) routeBox.style.bottom = "0";
 }
 
 /* Mesafe filtresi */
