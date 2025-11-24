@@ -41,12 +41,22 @@
   /* HARİTA */
   #map{width:100vw;height:100vh;}
 
-  /* TRAFİK AÇ/KAPA */
-  .traffic-toggle{
+  /* ALT BAR – TRAFİK + YOĞUNLUK KUTUSU */
+  .bottom-bar{
     position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+    display:flex;gap:10px;z-index:99;
+  }
+  .traffic-toggle{
     padding:10px 18px;font-weight:800;border-radius:var(--radius);
     background:#fff;border:2px solid #ffd2a8;color:var(--brand);
-    box-shadow:0 4px 14px #f2740530;z-index:99;cursor:pointer;
+    box-shadow:0 4px 14px #f2740530;cursor:pointer;
+    white-space:nowrap;
+  }
+  .traffic-info{
+    padding:9px 14px;font-size:.85rem;font-weight:700;
+    border-radius:var(--radius);
+    background:#fff;border:2px solid #ffd2a8;color:#444;
+    box-shadow:0 4px 14px #f2740530;min-width:150px;
   }
 
   /* ROTA PANELİ */
@@ -64,6 +74,26 @@
   .r-btn{flex:1;padding:10px;font-weight:700;border-radius:10px;color:#fff;background:var(--brand);border:none;}
   .r-btn.close{background:#222;}
 
+  /* Araç / Yaya modu */
+  .mode-toggle{
+    display:flex;gap:8px;margin-bottom:8px;
+  }
+  .mode-btn{
+    flex:1;
+    padding:6px 0;
+    font-size:.85rem;
+    font-weight:700;
+    border-radius:999px;
+    border:2px solid #ffd2a8;
+    background:#fff;
+    color:#555;
+    cursor:pointer;
+  }
+  .mode-btn.active{
+    background:var(--brand);
+    color:#fff;
+    border-color:var(--brand);
+  }
 </style>
 </head>
 <body>
@@ -84,11 +114,19 @@
 <!-- HARİTA -->
 <div id="map"></div>
 
-<!-- TRAFİK AÇ/KAPA -->
-<button id="toggleBtn" class="traffic-toggle">Trafik: AÇIK</button>
+<!-- ALT BAR: TRAFİK + YOĞUNLUK -->
+<div class="bottom-bar">
+  <button id="toggleBtn" class="traffic-toggle">Trafik: AÇIK</button>
+  <div id="trafficInfo" class="traffic-info">3 km çevre: -</div>
+</div>
 
 <!-- ROTA PANELİ -->
 <div class="route-panel" id="routePanel">
+  <div class="mode-toggle">
+    <button class="mode-btn active" data-mode="DRIVING">Araç</button>
+    <button class="mode-btn" data-mode="WALKING">Yaya</button>
+  </div>
+
   <div class="r-title" id="rTitle">Rota</div>
   <div class="r-line" id="rDist"></div>
   <div class="r-line" id="rTimeTraffic"></div>
@@ -102,9 +140,12 @@
 
 <script>
 let map, trafficLayer;
-let userPos=null, userMarker=null;
+let userPos = null, userMarker = null;
 let directionsService, directionsRenderer;
 let autocomplete;
+let currentMode = "DRIVING"; // "DRIVING" veya "WALKING"
+let areaTrafficTimer = null;
+let lastRouteDest = null; // {lat,lng,title}
 
 /* --- HARİTA BAŞLANGICI --- */
 function initMap(){
@@ -115,34 +156,57 @@ function initMap(){
   });
 
   map = new google.maps.Map(document.getElementById('map'), {
-    center:{lat:39.92,lng:32.85}, zoom:12,
-    streetViewControl:false, mapTypeControl:false
+    center:{lat:39.92,lng:32.85}, // fallback Ankara
+    zoom:12,
+    streetViewControl:false,
+    mapTypeControl:false
   });
   directionsRenderer.setMap(map);
 
   trafficLayer = new google.maps.TrafficLayer();
   trafficLayer.setMap(map);
 
-  /* KONUM TAKİBİ */
+  /* İLK AÇILIŞTA KONUMU AL VE HARİTAYI ORAYA KUR */
   if(navigator.geolocation){
-    navigator.geolocation.watchPosition(pos=>{
+    navigator.geolocation.getCurrentPosition(pos=>{
       userPos = {
         lat:pos.coords.latitude,
         lng:pos.coords.longitude
       };
-      if(!userMarker){
-        map.setCenter(userPos);
-        map.setZoom(14);
-        userMarker = new google.maps.Marker({
-          map, position:userPos,
-          icon:{
-            path:google.maps.SymbolPath.CIRCLE,
-            scale:8, fillColor:"#18b501",
-            fillOpacity:1, strokeColor:"#fff", strokeWeight:2
-          }
-        });
-      } else userMarker.setPosition(userPos);
-    });
+
+      map.setCenter(userPos);
+      map.setZoom(14);
+
+      userMarker = new google.maps.Marker({
+        map,
+        position:userPos,
+        icon:{
+          path:google.maps.SymbolPath.CIRCLE,
+          scale:8,
+          fillColor:"#18b501",
+          fillOpacity:1,
+          strokeColor:"#fff",
+          strokeWeight:2
+        }
+      });
+
+      // CANLI TAKİP – sadece marker güncelleniyor
+      navigator.geolocation.watchPosition(wPos=>{
+        userPos = {
+          lat:wPos.coords.latitude,
+          lng:wPos.coords.longitude
+        };
+        if(userMarker){
+          userMarker.setPosition(userPos);
+        }
+      });
+
+      // Konum geldikten sonra 3 km çevre trafik yoğunluğunu hesapla
+      computeAreaTraffic();
+      areaTrafficTimer = setInterval(computeAreaTraffic, 120000); // 2 dakikada bir güncelle
+    },err=>{
+      console.error("Konum alınamadı:", err);
+    }, {enableHighAccuracy:true, timeout:10000});
   }
 
   /* HARİTAYA TIKLAYINCA ROTA */
@@ -158,6 +222,27 @@ function initMap(){
   };
 
   initSearch();
+  initModeToggle();
+}
+
+/* --- MOD SEÇİMİ (ARAÇ / YAYA) --- */
+function initModeToggle(){
+  document.addEventListener("click",e=>{
+    if(!e.target.classList.contains("mode-btn")) return;
+    const mode = e.target.dataset.mode;
+    if(!mode) return;
+
+    currentMode = mode; // DRIVING / WALKING
+
+    document.querySelectorAll(".mode-btn").forEach(btn=>{
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+
+    // Eğer daha önce rota oluşturulduysa aynı hedefe göre yeni moda göre yeniden hesapla
+    if(lastRouteDest){
+      createRoute(lastRouteDest.lat, lastRouteDest.lng, lastRouteDest.title, true);
+    }
+  });
 }
 
 /* --- ARAMA --- */
@@ -184,41 +269,112 @@ function initSearch(){
   });
 }
 
-/* --- ROTA OLUŞTURMA --- */
-function createRoute(lat,lng,title){
-  if(!userPos) return alert("Konum alınamadı!");
+/* --- 3 KM ÇEVRE TRAFİK YOĞUNLUĞU --- */
+function computeAreaTraffic(){
+  if(!userPos || !directionsService) return;
 
-  directionsService.route({
-    origin:userPos,
-    destination:{lat,lng},
-    travelMode:"DRIVING",
+  // Yaklaşık 3 km kuzeye bir nokta (1 derece enlem ≈ 111 km)
+  const dLat = 3 / 111; 
+  const dest = {lat: userPos.lat + dLat, lng: userPos.lng};
+
+  const req = {
+    origin: userPos,
+    destination: dest,
+    travelMode: "DRIVING",
     drivingOptions:{
       departureTime:new Date(),
       trafficModel:"bestguess"
     }
-  },(res,status)=>{
+  };
+
+  directionsService.route(req,(res,status)=>{
+    if(status !== "OK" || !res || !res.routes.length) return;
+    const leg = res.routes[0].legs[0];
+    if(!leg.duration_in_traffic){
+      updateTrafficInfo(null);
+      return;
+    }
+    const secTraffic   = leg.duration_in_traffic.value;
+    const secNoTraffic = leg.duration.value;
+    let impact = Math.round(((secTraffic - secNoTraffic) / secNoTraffic) * 100);
+    if(impact < 0) impact = 0;
+    updateTrafficInfo(impact);
+  });
+}
+
+/* --- YOĞUNLUK KUTUSU (3 KM ÇEVRE) --- */
+function updateTrafficInfo(impact){
+  const el = document.getElementById("trafficInfo");
+  if(impact === null || isNaN(impact)){
+    el.textContent = "3 km çevre: -";
+    return;
+  }
+  let durum;
+  if(impact <= 5)      durum = "Akıcı";
+  else if(impact <=20) durum = "Hafif";
+  else if(impact <=40) durum = "Yoğun";
+  else                 durum = "Çok Yoğun";
+
+  el.textContent = `3 km çevre: ${durum} (%${impact})`;
+}
+
+/* --- ROTA OLUŞTURMA --- */
+function createRoute(lat,lng,title, fromModeChange=false){
+  if(!userPos) return alert("Konum alınamadı!");
+
+  // Son hedefi hatırla (mod değiştirmede tekrar kullanacağız)
+  lastRouteDest = {lat, lng, title};
+
+  const req = {
+    origin:userPos,
+    destination:{lat,lng},
+    travelMode: currentMode
+  };
+
+  if(currentMode === "DRIVING"){
+    req.drivingOptions = {
+      departureTime:new Date(),
+      trafficModel:"bestguess"
+    };
+  }
+
+  directionsService.route(req,(res,status)=>{
     if(status==="OK"){
       directionsRenderer.setDirections(res);
       const leg = res.routes[0].legs[0];
 
-      const withTraffic = leg.duration_in_traffic ? leg.duration_in_traffic.text : leg.duration.text;
-      const noTraffic = leg.duration.text;
-
-      const secTraffic = leg.duration_in_traffic ? leg.duration_in_traffic.value : leg.duration.value;
-      const secNoTraffic = leg.duration.value;
-
-      const impact = Math.round(((secTraffic - secNoTraffic) / secNoTraffic) * 100);
+      const rDist  = document.getElementById("rDist");
+      const rTimeT = document.getElementById("rTimeTraffic");
+      const rTimeN = document.getElementById("rTimeNoTraffic");
+      const rImp   = document.getElementById("rImpact");
 
       document.getElementById("rTitle").textContent="📍 "+title;
-      document.getElementById("rDist").textContent="Mesafe: "+leg.distance.text;
-      document.getElementById("rTimeTraffic").textContent="Trafikli: "+withTraffic;
-      document.getElementById("rTimeNoTraffic").textContent="Trafiksiz: "+noTraffic;
+      rDist.textContent = "Mesafe: "+leg.distance.text;
 
-      document.getElementById("rImpact").textContent=
-        "Yoğunluk Etkisi: %" + (impact > 0 ? impact : 0);
+      if(currentMode === "DRIVING"){
+        const withTrafficText = leg.duration_in_traffic ? leg.duration_in_traffic.text : leg.duration.text;
+        const noTrafficText   = leg.duration.text;
+
+        const secTraffic   = leg.duration_in_traffic ? leg.duration_in_traffic.value : leg.duration.value;
+        const secNoTraffic = leg.duration.value;
+        let impact = Math.round(((secTraffic - secNoTraffic) / secNoTraffic) * 100);
+        if(impact < 0) impact = 0;
+
+        rTimeT.textContent = "Trafikli: " + withTrafficText;
+        rTimeN.textContent = "Trafiksiz: " + noTrafficText;
+        rImp.textContent   = "Bu rotadaki trafik etkisi: %" + impact;
+      }else{
+        // YAYA MODU: sadece yürüyüş süresi göster, trafik bilgisi yok
+        rTimeT.textContent = "Yürüyüş süresi: " + leg.duration.text;
+        rTimeN.textContent = "";
+        rImp.textContent   = "";
+      }
 
       document.getElementById("openMapsBtn").onclick=()=>{
-        window.open(`https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${lat},${lng}`);
+        const modeParam = currentMode === "DRIVING" ? "driving" : "walking";
+        window.open(
+          `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${lat},${lng}&travelmode=${modeParam}`
+        );
       };
 
       document.getElementById("routePanel").classList.add("show");
