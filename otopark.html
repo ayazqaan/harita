@@ -44,7 +44,7 @@
     border-radius:4px;
   }
 
-  /* Mesafe filtresi */
+  /* Mesafe filtresi (SIRALAMA: 1 KM, 500 M, 2 KM, 5 KM) */
   .distance-bar{
     width:100%;
     background:#fff;
@@ -190,7 +190,7 @@
   }
   .route-cancel-btn{background:#111!important}
 
-  /* Açılış pop-up (kalsın) */
+  /* Açılış pop-up */
   .popup-info-bg{
     position:fixed;top:0;left:0;width:100vw;height:100vh;
     background:rgba(41,18,0,.22);display:flex;align-items:center;justify-content:center;z-index:10010
@@ -208,15 +208,15 @@
 </head>
 <body>
 
-  <!-- Üstte tek etiket -->
+  <!-- Üst bar -->
   <div class="topbar">
     <div class="top-pill">Otopark</div>
   </div>
 
-  <!-- MESAFE FİLTRESİ -->
+  <!-- MESAFE FİLTRESİ (1 KM başta) -->
   <div class="distance-bar">
-    <div class="dist-btn" data-radius="500">500 M</div>
     <div class="dist-btn active" data-radius="1000">1 KM</div>
+    <div class="dist-btn" data-radius="500">500 M</div>
     <div class="dist-btn" data-radius="2000">2 KM</div>
     <div class="dist-btn" data-radius="5000">5 KM</div>
   </div>
@@ -250,7 +250,7 @@ const CATEGORY = { keyword: "Otopark", key: "otopark", color: "#24c257" };
 
 /* Hedef: yarıçap içindeki otoparklar (max 60) */
 const MAX_RESULTS = 60;
-let SEARCH_RADIUS = 1000;  // varsayılan 1 KM
+let SEARCH_RADIUS = 1000;  // varsayılan: 1 KM
 
 /* Otoparklar için anahtar kelimeler + type: "parking" */
 const PARK_KEYWORDS = [
